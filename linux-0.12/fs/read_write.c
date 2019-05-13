@@ -36,7 +36,7 @@ int sys_lseek(unsigned int fd, off_t offset, int origin)
 	struct file * file;
 	int tmp;
 
-	if (fd >= NR_OPEN || !(file=current->filp[fd]) || !(file->f_inode)
+	if (fd >= NR_OPEN || !(file = current->filp[fd]) || !(file->f_inode)
 	   || !IS_SEEKABLE(MAJOR(file->f_inode->i_dev))) {
 		return -EBADF;
 	}

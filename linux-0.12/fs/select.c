@@ -55,7 +55,7 @@ typedef struct {
 
 typedef struct {
 	int nr;
-	wait_entry entry[NR_OPEN*3];
+	wait_entry entry[NR_OPEN * 3];
 } select_table;
 
 /**
@@ -69,11 +69,14 @@ static void add_wait(struct task_struct ** wait_address, select_table * p)
 {
 	int i;
 
-	if (!wait_address)
+	if (!wait_address) {
 		return;
-	for (i = 0 ; i < p->nr ; i++)
-		if (p->entry[i].wait_address == wait_address)
+	}
+	for (i = 0; i < p->nr; i++) {
+		if (p->entry[i].wait_address == wait_address) {
 			return;
+		}
+	}
 	p->entry[p->nr].wait_address = wait_address;
 	p->entry[p->nr].old_task = * wait_address;
 	*wait_address = current;
@@ -101,10 +104,12 @@ static void free_wait(select_table * p)
 			current->state = TASK_UNINTERRUPTIBLE;
 			schedule();
 		}
-		if (!*tpp)
+		if (!*tpp) {
 			printk("free_wait: NULL");
-		if (*tpp = p->entry[i].old_task)
+		}
+		if (*tpp = p->entry[i].old_task) {
 			(**tpp).state = 0;
+		}
 	}
 	p->nr = 0;
 }
@@ -119,16 +124,20 @@ static struct tty_struct * get_tty(struct m_inode * inode)
 {
 	int major, minor;
 
-	if (!S_ISCHR(inode->i_mode))
+	if (!S_ISCHR(inode->i_mode)) {
 		return NULL;
-	if ((major = MAJOR(inode->i_zone[0])) != 5 && major != 4)
+	}
+	if ((major = MAJOR(inode->i_zone[0])) != 5 && major != 4) {
 		return NULL;
-	if (major == 5)
+	}
+	if (major == 5) {
 		minor = current->tty;
-	else
+	} else {
 		minor = MINOR(inode->i_zone[0]);
-	if (minor < 0)
+	}
+	if (minor < 0) {
 		return NULL;
+	}
 	return TTY_TABLE(minor);
 }
 
@@ -151,16 +160,19 @@ static int check_in(select_table * wait, struct m_inode * inode)
 {
 	struct tty_struct * tty;
 
-	if (tty = get_tty(inode))
-		if (!EMPTY(tty->secondary))
+	if (tty = get_tty(inode)) {
+		if (!EMPTY(tty->secondary)) {
 			return 1;
-		else
+		} else {
 			add_wait(&tty->secondary->proc_list, wait);
-	else if (inode->i_pipe)
-		if (!PIPE_EMPTY(*inode))
+		}
+	} else if (inode->i_pipe) {
+		if (!PIPE_EMPTY(*inode)) {
 			return 1;
-		else
+		} else {
 			add_wait(&inode->i_wait, wait);
+		}
+	}
 	return 0;
 }
 
@@ -175,16 +187,19 @@ static int check_out(select_table * wait, struct m_inode * inode)
 {
 	struct tty_struct * tty;
 
-	if (tty = get_tty(inode))
-		if (!FULL(tty->write_q))
+	if (tty = get_tty(inode)) {
+		if (!FULL(tty->write_q)) {
 			return 1;
-		else
+		} else {
 			add_wait(&tty->write_q->proc_list, wait);
-	else if (inode->i_pipe)
-		if (!PIPE_FULL(*inode))
+		}
+	} else if (inode->i_pipe) {
+		if (!PIPE_FULL(*inode)) {
 			return 1;
-		else
+		} else {
 			add_wait(&inode->i_wait, wait);
+		}
+	}
 	return 0;
 }
 
@@ -201,16 +216,19 @@ static int check_ex(select_table * wait, struct m_inode * inode)
 {
 	struct tty_struct * tty;
 
-	if (tty = get_tty(inode))
-		if (!FULL(tty->write_q))
+	if (tty = get_tty(inode)) {
+		if (!FULL(tty->write_q)) {
 			return 0;
-		else
+		} else {
 			return 0;
-	else if (inode->i_pipe)
-		if (inode->i_count < 2)
+		}
+	} else if (inode->i_pipe) {
+		if (inode->i_count < 2) {
 			return 1;
-		else
-			add_wait(&inode->i_wait,wait);
+		} else {
+			add_wait(&inode->i_wait, wait);
+		}
+	}
 	return 0;
 }
 
@@ -232,18 +250,24 @@ int do_select(fd_set in, fd_set out, fd_set ex,
 
 	mask = in | out | ex;
 	for (i = 0 ; i < NR_OPEN ; i++,mask >>= 1) {
-		if (!(mask & 1))
+		if (!(mask & 1)) {
 			continue;
-		if (!current->filp[i])
+		}
+		if (!current->filp[i]) {
 			return -EBADF;
-		if (!current->filp[i]->f_inode)
+		}
+		if (!current->filp[i]->f_inode) {
 			return -EBADF;
-		if (current->filp[i]->f_inode->i_pipe)
+		}
+		if (current->filp[i]->f_inode->i_pipe) {
 			continue;
-		if (S_ISCHR(current->filp[i]->f_inode->i_mode))
+		}
+		if (S_ISCHR(current->filp[i]->f_inode->i_mode)) {
 			continue;
-		if (S_ISFIFO(current->filp[i]->f_inode->i_mode))
+		}
+		if (S_ISFIFO(current->filp[i]->f_inode->i_mode)) {
 			continue;
+		}
 		return -EBADF;
 	}
 repeat:
@@ -316,40 +340,44 @@ int sys_select( unsigned long *buffer )
 	exp = (fd_set *) get_fs_long(buffer++);
 	tvp = (struct timeval *) get_fs_long(buffer);
 
-	if (inp)
+	if (inp) {
 		in = mask & get_fs_long(inp);
-	if (outp)
+	}
+	if (outp) {
 		out = mask & get_fs_long(outp);
-	if (exp)
+	}
+	if (exp) {
 		ex = mask & get_fs_long(exp);
+	}
 	timeout = 0xffffffff;
 	if (tvp) {
-		timeout = get_fs_long((unsigned long *)&tvp->tv_usec)/(1000000/HZ);
+		timeout = get_fs_long((unsigned long *)&tvp->tv_usec) / (1000000 / HZ);
 		timeout += get_fs_long((unsigned long *)&tvp->tv_sec) * HZ;
 		timeout += jiffies;
 	}
 	current->timeout = timeout;
 	cli();
 	i = do_select(in, out, ex, &res_in, &res_out, &res_ex);
-	if (current->timeout > jiffies)
+	if (current->timeout > jiffies) {
 		timeout = current->timeout - jiffies;
-	else
+	} else {
 		timeout = 0;
+	}
 	sti();
 	current->timeout = 0;
 	if (i < 0)
 		return i;
 	if (inp) {
 		verify_area(inp, 4);
-		put_fs_long(res_in,inp);
+		put_fs_long(res_in, inp);
 	}
 	if (outp) {
-		verify_area(outp,4);
-		put_fs_long(res_out,outp);
+		verify_area(outp, 4);
+		put_fs_long(res_out, outp);
 	}
 	if (exp) {
-		verify_area(exp,4);
-		put_fs_long(res_ex,exp);
+		verify_area(exp, 4);
+		put_fs_long(res_ex, exp);
 	}
 	if (tvp) {
 		verify_area(tvp, sizeof(*tvp));
@@ -358,7 +386,8 @@ int sys_select( unsigned long *buffer )
 		timeout *= (1000000/HZ);
 		put_fs_long(timeout, (unsigned long *) &tvp->tv_usec);
 	}
-	if (!i && (current->signal & ~current->blocked))
+	if (!i && (current->signal & ~current->blocked)) {
 		return -EINTR;
+	}
 	return i;
 }

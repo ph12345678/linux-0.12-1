@@ -12,7 +12,6 @@
 
 /**
  * 将指定地址(addr)处的一块1024字节内存清零
- * 输入：eax = 0；ecx = 以字节为单位的数据块长度(BLOCK_SIZE/4)；edi = 指定起始地址addr
  * @param[in]	addr	指定起始地址
  */
 #define clear_block(addr) 												\
@@ -26,7 +25,7 @@
  * btsl指令用于测试并设置位(Bit Test and Set)。把基地址(%3)和位偏移值(%2)所指定的位值先保存到进
  * 位标志CF中，然后设置该位为1。指令setb用于根据进位标志CF设置操作数(%al)。如果CF=1，则%al=1，
  * 否则%al=0。
- * @param[in]	nr		位偏移	
+ * @param[in]	nr		位偏移
  * @param[in]	addr	指定地址的基地址
  * @retval		返回addr+nr处比特位的原位值	
  */
@@ -55,7 +54,6 @@
 
 /**
  * 从addr开始寻找第1个0值位
- * 输入：%0 - ecx(返回值)；%1 - ecx(0)；%2 - esi(addr)
  * 在addr指定地址开始的位图中寻找第1个是0的位，并将其距离addr的位偏移值返回。addr是缓冲块数据区
  * 的地址，扫描寻找的范围是1024字节(8192位)。
  * @param[in]	addr	指定地址
@@ -84,7 +82,7 @@
  * 释放设备dev上数据区中的逻辑块block，并复位指定逻辑块block对应的逻辑块位图位
  * @param[in]	dev		设备号
  * @param[in]	block	逻辑块号(盘块号)
- * @retval		成功则返回1，否则返回0。
+ * @retval		成功返回1，失败返回0
  */
 int free_block(int dev, int block)
 {
@@ -133,7 +131,7 @@ int free_block(int dev, int block)
  * 表示期望得到对应的逻辑块。接着为该逻辑块在缓冲区中取得一块对应缓冲块。最后将该缓冲块清零，并
  * 设置其已更新标志和已修改标志，并返回逻辑块号。
  * @param[in]	dev		设备号
- * @retval		成功返回逻辑块号，否则返回0。
+ * @retval		成功返回逻辑块号，失败返回0。
  */
 int new_block(int dev)
 {

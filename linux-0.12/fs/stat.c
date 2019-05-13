@@ -43,11 +43,11 @@ static void cp_stat(struct m_inode * inode, struct stat * statbuf)
 
 
 /**
- * 获取文件状态 系统调用
+ * 获取文件状态
  * 根据给定的文件名获取相关文件状态信息。
  * @param[in]		filename	指定的文件名
  * @param[in/out]	statbuf		存放状态信息的缓冲区指针
- * @retval			成功返回0，若出错则返回出错码
+ * @retval			成功返回0，出错返回出错码
  */
 int sys_stat(char * filename, struct stat * statbuf)
 {
@@ -67,7 +67,7 @@ int sys_stat(char * filename, struct stat * statbuf)
  * 根据给定的文件名获取相关文件状态信息。文件路径名中有符号链接文件名，则取符号文件的状态。
  * @param[in]		filename	指定的文件名
  * @param[in/out]	statbuf		存放状态信息的缓冲区指针
- * @retval			成功返回0，若出错则返回出错码
+ * @retval			成功返回0，出错返回出错码
  */
 int sys_lstat(char * filename, struct stat * statbuf)
 {
@@ -82,19 +82,20 @@ int sys_lstat(char * filename, struct stat * statbuf)
 }
 
 /**
- * 获取文件状态 系统调用
+ * 获取文件状态
  * 根据给定的文件名获取相关文件状态信息。
  * @param[in]		fd			指定文件的句柄
  * @param[in/out]	statbuf		存放状态信息的缓冲区指针
- * @retval			成功返回0，若出错则返回出错码
+ * @retval			成功返回0，出错返回出错码
  */
 int sys_fstat(unsigned int fd, struct stat * statbuf)
 {
 	struct file * f;
 	struct m_inode * inode;
 
-	if (fd >= NR_OPEN || !(f=current->filp[fd]) || !(inode=f->f_inode))
+	if (fd >= NR_OPEN || !(f = current->filp[fd]) || !(inode = f->f_inode)) {
 		return -EBADF;
+	}
 	cp_stat(inode,statbuf);
 	return 0;
 }

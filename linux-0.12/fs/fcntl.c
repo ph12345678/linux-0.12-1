@@ -19,7 +19,7 @@ extern int sys_close(int fd);
  * 复制文件句柄(文件描述符)
  * @param[in]	fd		欲复制的文件句柄
  * @param[in]	arg		指定新文件句柄的最小数值
- * @retval		成功返回新文件句柄，否则出错码
+ * @retval		成功返回新文件句柄，失败返回出错码
  */
 static int dupfd(unsigned int fd, unsigned int arg)
 {
@@ -46,7 +46,7 @@ static int dupfd(unsigned int fd, unsigned int arg)
 }
 
 /**
- * 复制文件句柄系统调用
+ * 复制文件句柄
  * @param[in]	oldfd	欲复制的指定文件句柄
  * @param[in]	newfd	新文件句柄值(如果newfd已打开，则首先关闭之)
  * @retval		新文件句柄或出错码
@@ -58,7 +58,7 @@ int sys_dup2(unsigned int oldfd, unsigned int newfd)
 }
 
 /**
- * 复制文件句柄系统调用
+ * 复制文件句柄
  * @param[in]	fildes	欲复制的指定文件句柄
  * @retval		新文件句柄(当前最小的未用句柄值)或出错码
  */
@@ -69,7 +69,7 @@ int sys_dup(unsigned int fildes)
 
 
 /**
- * 文件控制系统调用函数
+ * 文件控制
  * @param[in]	fd		文件句柄
  * @param[in]	cmd		控制命令
  * @param[in]	arg		针对不同的命令有不同的含义
