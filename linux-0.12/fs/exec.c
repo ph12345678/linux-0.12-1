@@ -58,7 +58,7 @@ extern int sys_close(int fd);
  * 为进程选择一个库文件，并替换进程当前库文件i节点字段值为这里指定库文件名的i节点指针。如果
  * library指针为空，则把进程当前的库文件释放掉。
  * @param[in]       library     库文件名
- * @retval          成功返回0，否则返回出错码
+ * @retval          成功返回0，失败返回出错码
  */
 int sys_uselib(const char * library)
 {
@@ -82,7 +82,7 @@ int sys_uselib(const char * library)
 	current->library = NULL;
 	base = get_base(current->ldt[2]);
 	base += LIBRARY_OFFSET;
-	free_page_tables(base,LIBRARY_SIZE);
+	free_page_tables(base, LIBRARY_SIZE);
 	current->library = inode;
 	return 0;
 }
@@ -101,7 +101,7 @@ int sys_uselib(const char * library)
  * 在新任务中创建参数和环境变量指针表
  * @param[in]	p		数据段中参数和环境信息偏移指针
  * @param[in]	argc	参数个数
- * @param[in]	envc	环境变量个数.
+ * @param[in]	envc	环境变量个数
  * @retval		栈指针值
  */
 static unsigned long * create_tables(char * p, int argc, int envc)
@@ -109,20 +109,22 @@ static unsigned long * create_tables(char * p, int argc, int envc)
 	unsigned long *argv, *envp;
 	unsigned long * sp;
 
+	/* 栈指针是以4字节为边界进行寻址的，故为0xfffffffc */
 	sp = (unsigned long *) (0xfffffffc & (unsigned long) p);
-	sp -= envc+1;
+	/* 多留一个位置用于存放NULL */
+	sp -= envc + 1;
 	envp = sp;
-	sp -= argc+1;
+	sp -= argc + 1;
 	argv = sp;
 	put_fs_long((unsigned long)envp, --sp);
 	put_fs_long((unsigned long)argv, --sp);
 	put_fs_long((unsigned long)argc, --sp);
-	while (argc-->0) {
+	while (argc-- > 0) {
 		put_fs_long((unsigned long) p, argv++);
 		while (get_fs_byte(p++)) /* nothing */ ;
 	}
 	put_fs_long(0, argv);
-	while (envc-->0) {
+	while (envc-- > 0) {
 		put_fs_long((unsigned long) p, envp++);
 		while (get_fs_byte(p++)) /* nothing */ ;
 	}
@@ -138,7 +140,6 @@ static unsigned long * create_tables(char * p, int argc, int envc)
  */
  
 /**
- * 计算参数个数
  * 统计参数指针数组中指针的个数
  * @param[in]	argv	参数指针数组(最后一个指针项是NULL)
  * @retval		参数个数
@@ -199,9 +200,9 @@ static int count(char ** argv)
  * @param[in]	argc		欲添加的参数个数
  * @param[in]	argv		参数指针数组
  * @param[in]	page		参数和环境空间页面指针数组
- * @param[in]	p           参数表空间中偏移指针,始终指向已复制串的头部
- * @param[in]	from_kmem   字符串来源标志。
- * @retval		参数和环境空间当前头部指针。若出错则返回0
+ * @param[in]	p           参数表空间中偏移指针，始终指向已复制串的头部
+ * @param[in]	from_kmem   字符串来源标志
+ * @retval		成功返回参数和环境空间当前头部指针，出错则返回0
  */
 static unsigned long copy_strings(int argc, char ** argv, unsigned long *page,
 		unsigned long p, int from_kmem)
@@ -218,29 +219,32 @@ static unsigned long copy_strings(int argc, char ** argv, unsigned long *page,
 	if (from_kmem == 2) {
 		set_fs(new_fs);
 	}
+	/* 从最后一个参数逆向开始复制 */
 	while (argc-- > 0) {
 		if (from_kmem == 1) {
 			set_fs(new_fs);
 		}
-		if (!(tmp = (char *)get_fs_long(((unsigned long *)argv)+argc))) {
+		if (!(tmp = (char *)get_fs_long(((unsigned long *)argv) + argc))) {
 			panic("argc is wrong");
 		}
 		if (from_kmem == 1) {
 			set_fs(old_fs);
 		}
-		len = 0;		/* remember zero-padding */
+		len = 0;		/* remember zero-padding */ /* 串是以NULL结尾的 */
 		do {
 			len++;
 		} while (get_fs_byte(tmp++));
-		if (p-len < 0) {	/* this shouldn't happen - 128kB */
+		/* 不会发生，参数表空间够大（128KB） */
+		if (p - len < 0) {	/* this shouldn't happen - 128kB */
 			set_fs(old_fs);
 			return 0;
 		}
+		/* 把参数对应的字符串中的逐个字符逆向地复制到参数和环境空间末端处 */
 		while (len) {
 			--p; --tmp; --len;
 			if (--offset < 0) {
 				offset = p % PAGE_SIZE;
-				if (from_kmem==2) {
+				if (from_kmem == 2) {
 					set_fs(old_fs);
 				}
 				if (!(pag = (char *) page[p/PAGE_SIZE]) &&
@@ -248,14 +252,14 @@ static unsigned long copy_strings(int argc, char ** argv, unsigned long *page,
 				      (unsigned long *) get_free_page())) {
 					return 0;
 				}
-				if (from_kmem==2) {
+				if (from_kmem == 2) {
 					set_fs(new_fs);
 				}
 			}
 			*(pag + offset) = get_fs_byte(tmp);
 		}
 	}
-	if (from_kmem==2) {
+	if (from_kmem == 2) {
 		set_fs(old_fs);
 	}
 	return p;
@@ -271,24 +275,26 @@ static unsigned long copy_strings(int argc, char ** argv, unsigned long *page,
  */
 static unsigned long change_ldt(unsigned long text_size, unsigned long * page)
 {
-	unsigned long code_limit,data_limit,code_base,data_base;
+	unsigned long code_limit, data_limit, code_base, data_base;
 	int i;
 
 	code_limit = TASK_SIZE;
 	data_limit = TASK_SIZE;
 	code_base = get_base(current->ldt[1]);
 	data_base = code_base;
-	set_base(current->ldt[1],code_base);
-	set_limit(current->ldt[1],code_limit);
-	set_base(current->ldt[2],data_base);
-	set_limit(current->ldt[2],data_limit);
+	set_base(current->ldt[1], code_base);
+	set_limit(current->ldt[1], code_limit);
+	set_base(current->ldt[2], data_base);
+	set_limit(current->ldt[2], data_limit);
 /* make sure fs points to the NEW data segment */
+	/* FS段寄存器中放入局部表数据段描述符的选择符(0x17) */
 	__asm__("pushl $0x17\n\tpop %%fs"::);
-	data_base += data_limit - LIBRARY_SIZE;
-	for (i=MAX_ARG_PAGES-1 ; i>=0 ; i--) {
+	/* 将参数和环境空间已存放数据的页面（最多有MAX_ARG_PAGES页）放到数据段末端 */
+	data_base += data_limit - LIBRARY_SIZE; /* 库文件代码占用进程空间末端部分 */
+	for (i = MAX_ARG_PAGES - 1; i >= 0; i--) {
 		data_base -= PAGE_SIZE;
 		if (page[i]) {
-			put_dirty_page(page[i],data_base);
+			put_dirty_page(page[i], data_base);
 		}
 	}
 	return data_limit;
@@ -313,28 +319,28 @@ static unsigned long change_ldt(unsigned long text_size, unsigned long * page)
  * @param[in]	filename	被执行程序文件名指针
  * @param[in]	argv		命令行参数指针数组的指针
  * @param[in]	envp		环境变更指针数组的指针
- * @retval		如果调用成功，则不返回；否则设置出错号，并返回-1
+ * @retval		调用成功返回0；失败设置出错号，并返回-1
  */
-int do_execve(unsigned long * eip,long tmp,char * filename,
+int do_execve(unsigned long * eip, long tmp, char * filename,
 	char ** argv, char ** envp)
 {
 	struct m_inode * inode;
 	struct buffer_head * bh;
 	struct exec ex;
-	unsigned long page[MAX_ARG_PAGES];
-	int i,argc,envc;
+	unsigned long page[MAX_ARG_PAGES]; /* 参数和环境串空间页面指针数组 */
+	int i, argc, envc;
 	int e_uid, e_gid;
 	int retval;
 	int sh_bang = 0;
-	unsigned long p=PAGE_SIZE*MAX_ARG_PAGES-4;
+	unsigned long p = PAGE_SIZE * MAX_ARG_PAGES - 4;
 
 	if ((0xffff & eip[1]) != 0x000f) {
 		panic("execve called from supervisor mode");
 	}
-	for (i=0 ; i<MAX_ARG_PAGES ; i++) {	/* clear page-table */
-		page[i]=0;
+	for (i = 0; i < MAX_ARG_PAGES; i++) {	/* clear page-table */
+		page[i] = 0;
 	}
-	if (!(inode=namei(filename))) {		/* get executables inode */
+	if (!(inode = namei(filename))) {		/* get executables inode */
 		return -ENOENT;
 	}
 	argc = count(argv);
@@ -342,9 +348,11 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 	
 restart_interp:
 	if (!S_ISREG(inode->i_mode)) {	/* must be regular file */
+									/* 必须是常规文件 */
 		retval = -EACCES;
 		goto exec_error2;
 	}
+	/* 根据执行文件i节点中的属性，看看本进程是否有权执行它 */
 	i = inode->i_mode;
 	e_uid = (i & S_ISUID) ? inode->i_uid : current->euid;
 	e_gid = (i & S_ISGID) ? inode->i_gid : current->egid;
@@ -357,11 +365,13 @@ restart_interp:
 		retval = -ENOEXEC;
 		goto exec_error2;
 	}
-	if (!(bh = bread(inode->i_dev,inode->i_zone[0]))) {
+	if (!(bh = bread(inode->i_dev, inode->i_zone[0]))) {
 		retval = -EACCES;
 		goto exec_error2;
 	}
+
 	ex = *((struct exec *) bh->b_data);	/* read exec-header */
+	/* “#!”开头则为脚本文件 */
 	if ((bh->b_data[0] == '#') && (bh->b_data[1] == '!') && (!sh_bang)) {
 		/*
 		 * This section does the #! interpretation.
@@ -371,13 +381,13 @@ restart_interp:
 		char buf[128], *cp, *interp, *i_name, *i_arg;
 		unsigned long old_fs;
 
-		strncpy(buf, bh->b_data+2, 127);
+		strncpy(buf, bh->b_data + 2, 127);
 		brelse(bh);
 		iput(inode);
 		buf[127] = '\0';
 		if (cp = strchr(buf, '\n')) {
 			*cp = '\0';
-			for (cp = buf; (*cp == ' ') || (*cp == '\t'); cp++);
+			for (cp = buf; (*cp == ' ') || (*cp == '\t'); cp ++);
 		}
 		if (!cp || *cp == '\0') {
 			retval = -ENOEXEC; /* No interpreter name found */
@@ -386,8 +396,9 @@ restart_interp:
 		interp = i_name = cp;
 		i_arg = 0;
 		for ( ; *cp && (*cp != ' ') && (*cp != '\t'); cp++) {
- 			if (*cp == '/')
-				i_name = cp+1;
+ 			if (*cp == '/') {
+				i_name = cp + 1;
+			}
 		}
 		if (*cp) {
 			*cp++ = '\0';
@@ -409,14 +420,21 @@ restart_interp:
 		 * This is done in reverse order, because of how the
 		 * user environment and arguments are stored.
 		 */
+		/*
+		* 拼接 	 (1) argv[0]中放解释程序的名称
+		* 		(2) (可选的)解释程序的参数
+		* 		(3) 脚本程序的名称
+		*
+		* 这是以逆序进行处理的，是由于用户环境和参数的存放方式造成的。
+		*/
 		p = copy_strings(1, &filename, page, p, 1);
-		argc++;
+		argc ++;
 		if (i_arg) {
 			p = copy_strings(1, &i_arg, page, p, 2);
 			argc++;
 		}
 		p = copy_strings(1, &i_name, page, p, 2);
-		argc++;
+		argc ++;
 		if (!p) {
 			retval = -ENOMEM;
 			goto exec_error1;
@@ -426,7 +444,7 @@ restart_interp:
 		 */
 		old_fs = get_fs();
 		set_fs(get_ds());
-		if (!(inode=namei(interp))) { /* get executables inode */
+		if (!(inode = namei(interp))) { /* get executables inode */
 			set_fs(old_fs);
 			retval = -ENOENT;
 			goto exec_error1;
@@ -436,8 +454,8 @@ restart_interp:
 	}
 	brelse(bh);
 	if (N_MAGIC(ex) != ZMAGIC || ex.a_trsize || ex.a_drsize ||
-		ex.a_text+ex.a_data+ex.a_bss>0x3000000 ||
-		inode->i_size < ex.a_text+ex.a_data+ex.a_syms+N_TXTOFF(ex)) {
+		ex.a_text + ex.a_data + ex.a_bss > 0x3000000 ||
+		inode->i_size < ex.a_text + ex.a_data + ex.a_syms + N_TXTOFF(ex)) {
 		retval = -ENOEXEC;
 		goto exec_error2;
 	}
@@ -447,8 +465,8 @@ restart_interp:
 		goto exec_error2;
 	}
 	if (!sh_bang) {
-		p = copy_strings(envc,envp,page,p,0);
-		p = copy_strings(argc,argv,page,p,0);
+		p = copy_strings(envc, envp, page, p, 0);
+		p = copy_strings(argc, argv, page, p, 0);
 		if (!p) {
 			retval = -ENOMEM;
 			goto exec_error2;
@@ -456,28 +474,34 @@ restart_interp:
 	}
 /* OK, This is the point of no return */
 /* note that current->library stays unchanged by an exec */
-	if (current->executable)
+/* OK，下面开始就没有返回的地方了 */
+/* 注意，exec类函数不会改动 current->library */
+	if (current->executable) {
 		iput(current->executable);
+	}
 	current->executable = inode;
 	current->signal = 0;
-	for (i=0 ; i<32 ; i++) {
+	for (i = 0; i < 32; i ++) {
 		current->sigaction[i].sa_mask = 0;
 		current->sigaction[i].sa_flags = 0;
 		if (current->sigaction[i].sa_handler != SIG_IGN)
 			current->sigaction[i].sa_handler = NULL;
 	}
-	for (i=0 ; i<NR_OPEN ; i++)
-		if ((current->close_on_exec>>i)&1)
+	for (i = 0; i < NR_OPEN; i ++) {
+		if ((current->close_on_exec >> i) & 1) {
 			sys_close(i);
+		}
+	}
 	current->close_on_exec = 0;
-	free_page_tables(get_base(current->ldt[1]),get_limit(0x0f));
-	free_page_tables(get_base(current->ldt[2]),get_limit(0x17));
-	if (last_task_used_math == current)
+	free_page_tables(get_base(current->ldt[1]), get_limit(0x0f));
+	free_page_tables(get_base(current->ldt[2]), get_limit(0x17));
+	if (last_task_used_math == current) {
 		last_task_used_math = NULL;
+	}
 	current->used_math = 0;
-	p += change_ldt(ex.a_text,page);
-	p -= LIBRARY_SIZE + MAX_ARG_PAGES*PAGE_SIZE;
-	p = (unsigned long) create_tables((char *)p,argc,envc);
+	p += change_ldt(ex.a_text, page);
+	p -= LIBRARY_SIZE + MAX_ARG_PAGES * PAGE_SIZE;
+	p = (unsigned long) create_tables((char *)p, argc, envc);
 	current->brk = ex.a_bss +
 		(current->end_data = ex.a_data +
 		(current->end_code = ex.a_text));
@@ -485,12 +509,13 @@ restart_interp:
 	current->suid = current->euid = e_uid;
 	current->sgid = current->egid = e_gid;
 	eip[0] = ex.a_entry;		/* eip, magic happens :-) */
-	eip[3] = p;			/* stack pointer */
+	eip[3] = p;					/* stack pointer */
 	return 0;
 exec_error2:
 	iput(inode);
 exec_error1:
-	for (i=0 ; i<MAX_ARG_PAGES ; i++)
+	for (i = 0; i < MAX_ARG_PAGES; i ++) {
 		free_page(page[i]);
+	}
 	return(retval);
 }
