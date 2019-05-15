@@ -1,11 +1,11 @@
 #ifndef _SCHED_H
 #define _SCHED_H
 
-#define HZ 100
+#define HZ 100		/* 时钟滴答数， 1秒钟100个 */
 
-#define NR_TASKS	64
-#define TASK_SIZE	0x04000000
-#define LIBRARY_SIZE	0x00400000
+#define NR_TASKS		64			/* 系统同时容纳的最多任务数 */
+#define TASK_SIZE		0x04000000	/* 进程的长度 */
+#define LIBRARY_SIZE	0x00400000	/* 动态加载库的长度 */
 
 #if (TASK_SIZE & 0x3fffff)
 #error "TASK_SIZE must be multiple of 4M"
@@ -23,10 +23,10 @@
 #error "TASK_SIZE*NR_TASKS must be 4GB"
 #endif
 
-#define LIBRARY_OFFSET (TASK_SIZE - LIBRARY_SIZE)
+#define LIBRARY_OFFSET (TASK_SIZE - LIBRARY_SIZE)	/* 动态库被加载的位置 */
 
-#define CT_TO_SECS(x)	((x) / HZ)
-#define CT_TO_USECS(x)	(((x) % HZ) * 1000000/HZ)
+#define CT_TO_SECS(x)	((x) / HZ)					/* 滴答数转换成秒 */
+#define CT_TO_USECS(x)	(((x) % HZ) * 1000000/HZ)	/* 滴答数转换成微秒 */
 
 #define FIRST_TASK task[0]
 #define LAST_TASK task[NR_TASKS-1]
@@ -43,11 +43,11 @@
 #error "Currently the close-on-exec-flags and select masks are in one long, max 32 files/proc"
 #endif
 
-#define TASK_RUNNING		0
-#define TASK_INTERRUPTIBLE	1
-#define TASK_UNINTERRUPTIBLE	2
-#define TASK_ZOMBIE		3
-#define TASK_STOPPED		4
+#define TASK_RUNNING			0	/* 任务正在运行或已准备就绪 */
+#define TASK_INTERRUPTIBLE		1	/* 任务处于可中断等待状态 */
+#define TASK_UNINTERRUPTIBLE	2	/* 任务处于不可中断等待状态 */
+#define TASK_ZOMBIE				3	/* 任务处于僵死状态，已经停止，但父进程还没发出信号 */
+#define TASK_STOPPED			4	/* 任务已停止 */
 
 #ifndef NULL
 #define NULL ((void *) 0)
@@ -102,6 +102,7 @@ struct tss_struct {
 	struct i387_struct i387;
 };
 
+/* 任务(进程)数据结构，或称为进程描述符 */
 struct task_struct {
 /* these are hardcoded - don't touch */
 /* 硬编码字段 */
@@ -112,43 +113,66 @@ struct task_struct {
 	long signal;					/* 信号位图 */
 	struct sigaction sigaction[32];	/* 信号执行属性结构,对应信号将要执行的操作和标志信息 */
 	long blocked;					/* bitmap of masked signals */
+									/* 进程信号屏蔽码(对应信号位图) */
 /* various fields */
 /* 可变字段 */
 	int exit_code;					/* 退出码 */
-	unsigned long start_code,end_code,end_data,brk,start_stack;
-	long pid,pgrp,session,leader;
-	int	groups[NGROUPS];
+	unsigned long start_code;		/* 代码段地址 */
+	unsigned long end_code;			/* 代码段长度（字节数） */
+	unsigned long end_data;			/* 代码段加数据段的长度 （字节数）*/
+	unsigned long brk;				/* 总长度(字节数) */
+	unsigned long start_stack;		/* 堆栈段地址 */
+	long pid;						/* 进程标识号(进程号) */
+	long pgrp;						/* 进程组号 */
+	long session;					/* 会话号 */
+	long leader;					/* 会话首领 */
+	int	groups[NGROUPS];			/* 进程所属组号（一个进程可属于多个组） */
 	/* 
 	 * pointers to parent process, youngest child, younger sibling,
 	 * older sibling, respectively.  (p->father can be replaced with 
 	 * p->p_pptr->pid)
 	 */
-	struct task_struct	*p_pptr, *p_cptr, *p_ysptr, *p_osptr;
-	unsigned short uid,euid,suid;
-	unsigned short gid,egid,sgid;
-	unsigned long timeout,alarm;
-	long utime,stime,cutime,cstime,start_time;
-	struct rlimit rlim[RLIM_NLIMITS]; 
-	unsigned int flags;	/* per process flags, defined below */
-	unsigned short used_math;
+	struct task_struct *p_pptr;		/* 指向父进程的指针 */
+	struct task_struct *p_cptr;		/* 指向最新子进程的指针 */
+	struct task_struct *p_ysptr;	/* 指向比自己后创建的相邻进程的指针 */
+	struct task_struct *p_osptr;	/* 指向比自己早创建的相邻进程的指针 */
+	unsigned short uid;				/* 用户id */
+	unsigned short euid;			/* 有效用户id */
+	unsigned short suid;			/* 保存的设置用户id */
+	unsigned short gid;				/* 组id */
+	unsigned short egid;			/* 有效组id */
+	unsigned short sgid;			/* 保存的设置组id */
+	unsigned long timeout;			/* 内核定时超时值 */
+	unsigned long alarm;			/* 报警定时值(滴答数) */
+	long utime;						/* 用户态运行时间(滴答数) */
+	long stime;						/* 内核态运行时间(滴答数) */
+	long cutime;					/* 子进程用户态运行时间 */
+	long cstime;					/* 子进程内核态运行时间 */
+	long start_time;				/* 进程开始运行时刻 */
+	struct rlimit rlim[RLIM_NLIMITS];	/* 进程资源使用统计数组 */
+	unsigned int flags;					/* per process flags, defined below */
+										/* 各进程的标志 */
+	unsigned short used_math;			/* 是否使用了协处理器的标志 */
 /* file system info */
 	int tty;		/* -1 if no tty, so it must be signed */
+					/* 进程使用tty终端的子设备号。-1表示没有使用 */
 	unsigned short umask;			/* 文件创建属性屏蔽位 */
-	struct m_inode * pwd;
-	struct m_inode * root;
-	struct m_inode * executable;
-	struct m_inode * library;
-	unsigned long close_on_exec;
-	struct file * filp[NR_OPEN];
+	struct m_inode * pwd;			/* 当前工作目录i节点结构指针 */
+	struct m_inode * root;			/* 根目录i节点结构指针 */
+	struct m_inode * executable;	/* 执行文件i节点结构指针 */
+	struct m_inode * library;		/* 被加载库文件i节点结构指针 */
+	unsigned long close_on_exec;	/* 执行时关闭文件句柄位图标志 */
+	struct file * filp[NR_OPEN];	/* 文件结构指针表，最多32项。表项号即是文件描述符的值 */
 /* ldt for this task 0 - zero 1 - cs 2 - ds&ss */
-	struct desc_struct ldt[3];
+	struct desc_struct ldt[3];		/* 局部描述符表, 0 - 空，1 - 代码段cs，2 - 数据和堆栈段ds&ss */
 /* tss for this task */
-	struct tss_struct tss;
+	struct tss_struct tss;			/* 进程的任务状态段信息结构 */
 };
 
 /*
  * Per process flags
  */
+/* 每个进程的标志 */    				/* 打印对齐警告信息。还未实现，仅用于486 */
 #define PF_ALIGNWARN	0x00000001	/* Print alignment warning msgs */
 					/* Not implemented yet, only for 486*/
 
@@ -185,14 +209,14 @@ struct task_struct {
 	}, \
 }
 
-extern struct task_struct *task[NR_TASKS];
-extern struct task_struct *last_task_used_math;
-extern struct task_struct *current;
-extern unsigned long volatile jiffies;
-extern unsigned long startup_time;
-extern int jiffies_offset;
+extern struct task_struct *task[NR_TASKS];	/* 任务指针数组 */
+extern struct task_struct *last_task_used_math;	/* 上一个使用过协处理器的进程 */
+extern struct task_struct *current;			/* 当前运行进程结构指针变量 */
+extern unsigned long volatile jiffies;		/* 从开机开始算起的滴答数 */
+extern unsigned long startup_time;			/* 开机时间，从1970:0:0:0:0开始计时的秒数 */
+extern int jiffies_offset;					/* 用于累计需要调整的时间滴答数 */
 
-#define CURRENT_TIME (startup_time+(jiffies+jiffies_offset)/HZ)
+#define CURRENT_TIME (startup_time+(jiffies+jiffies_offset)/HZ)	/* 当前时间(秒数) */
 
 extern void add_timer(long jiffies, void (*fn)(void));
 extern void sleep_on(struct task_struct ** p);

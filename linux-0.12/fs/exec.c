@@ -202,7 +202,7 @@ static int count(char ** argv)
  * @param[in]	page		参数和环境空间页面指针数组
  * @param[in]	p           参数表空间中偏移指针，始终指向已复制串的头部
  * @param[in]	from_kmem   字符串来源标志
- * @retval		成功返回参数和环境空间当前头部指针，出错则返回0
+ * @retval		成功返回参数和环境空间当前头部指针，出错返回0
  */
 static unsigned long copy_strings(int argc, char ** argv, unsigned long *page,
 		unsigned long p, int from_kmem)
@@ -239,7 +239,7 @@ static unsigned long copy_strings(int argc, char ** argv, unsigned long *page,
 			set_fs(old_fs);
 			return 0;
 		}
-		/* 把参数对应的字符串中的逐个字符逆向地复制到参数和环境空间末端处 */
+		/* 把参数对应的字符串中的逐个字符（从尾到头）地复制到参数和环境空间末端处 */
 		while (len) {
 			--p; --tmp; --len;
 			if (--offset < 0) {
@@ -334,6 +334,9 @@ int do_execve(unsigned long * eip, long tmp, char * filename,
 	int sh_bang = 0;
 	unsigned long p = PAGE_SIZE * MAX_ARG_PAGES - 4;
 
+	/* 参数eip[1]是调用本次系统调用的原用户程序代码段寄存器CS值，其中的段选择符当然必须是
+	当前任务的代码段选择符（0x000f）。 若不是该值，那么CS只能会是内核代码段的选择符0x0008。
+	但这是绝对不允许的，因为内核代码是常驻内存而不能被替换掉的。*/
 	if ((0xffff & eip[1]) != 0x000f) {
 		panic("execve called from supervisor mode");
 	}
@@ -352,19 +355,24 @@ restart_interp:
 		retval = -EACCES;
 		goto exec_error2;
 	}
-	/* 根据执行文件i节点中的属性，看看本进程是否有权执行它 */
 	i = inode->i_mode;
-	e_uid = (i & S_ISUID) ? inode->i_uid : current->euid;
-	e_gid = (i & S_ISGID) ? inode->i_gid : current->egid;
+	e_uid = (i & S_ISUID) ? inode->i_uid : current->euid; /* 是否设置了执行时设置用户ID */
+	e_gid = (i & S_ISGID) ? inode->i_gid : current->egid; /* 是否设置了执行时设置组ID */
+	/* 根据执行文件i节点中的属性，看看本进程是否有权执行它 */
 	if (current->euid == inode->i_uid) {
 		i >>= 6;
 	} else if (in_group_p(inode->i_gid)) {
 		i >>= 3;
 	}
+	/* 当前用户无权限 | 文件可执行 | 当前用户是否是超级用户 */
+	/* 0 			| 1 		| 0 */
+	/* 0 			| 0 		| 1 */
+	/* 0 			| 0 		| 0 */
 	if (!(i & 1) && !((inode->i_mode & 0111) && suser())) {
 		retval = -ENOEXEC;
 		goto exec_error2;
 	}
+	/* 读取第一块数据 */
 	if (!(bh = bread(inode->i_dev, inode->i_zone[0]))) {
 		retval = -EACCES;
 		goto exec_error2;
@@ -435,6 +443,14 @@ restart_interp:
 		}
 		p = copy_strings(1, &i_name, page, p, 2);
 		argc ++;
+		/* 上面一段代码的主要功能： 
+			1. 复制环境变量
+			2. 复制程序参数，举例如下：
+				命令行： $ example.sh -arg1 -arg2
+				example.sh文件第一句： #!/bin/bash -argv1 -argv2
+		   	   进程空间末尾的参数和环境空间中则存入了（从低到高）：
+		   		bash -argv1 -argv2 example.sh -arg1 -arg2
+		*/
 		if (!p) {
 			retval = -ENOMEM;
 			goto exec_error1;
@@ -442,6 +458,8 @@ restart_interp:
 		/*
 		 * OK, now restart the process with the interpreter's inode.
 		 */
+		/* namei是从用户数据空间（fs指向）取参数的，而interp处于内核数据空间，故临时设置fs
+		 指向内核空间 */
 		old_fs = get_fs();
 		set_fs(get_ds());
 		if (!(inode = namei(interp))) { /* get executables inode */
@@ -453,6 +471,8 @@ restart_interp:
 		goto restart_interp;
 	}
 	brelse(bh);
+	/* 对这个内核来说，它仅支持ZMAGIC执行文件格式，不支持含有代码或数据重定位信息的执
+	行文件，执行文件实在太大或者执行文件残缺不全也不行 */
 	if (N_MAGIC(ex) != ZMAGIC || ex.a_trsize || ex.a_drsize ||
 		ex.a_text + ex.a_data + ex.a_bss > 0x3000000 ||
 		inode->i_size < ex.a_text + ex.a_data + ex.a_syms + N_TXTOFF(ex)) {
@@ -481,18 +501,22 @@ restart_interp:
 	}
 	current->executable = inode;
 	current->signal = 0;
+	/* 复位原进程的所有信号处理句柄，忽略SIG_IGN的句柄 */
 	for (i = 0; i < 32; i ++) {
 		current->sigaction[i].sa_mask = 0;
 		current->sigaction[i].sa_flags = 0;
-		if (current->sigaction[i].sa_handler != SIG_IGN)
+		if (current->sigaction[i].sa_handler != SIG_IGN) {
 			current->sigaction[i].sa_handler = NULL;
+		}
 	}
+	/* 根据close_on_exec关闭指定的文件，复位close_on_exec */
 	for (i = 0; i < NR_OPEN; i ++) {
 		if ((current->close_on_exec >> i) & 1) {
 			sys_close(i);
 		}
 	}
 	current->close_on_exec = 0;
+	/* 释放原进程的代码段和数据段占用的物理页面及页表 */
 	free_page_tables(get_base(current->ldt[1]), get_limit(0x0f));
 	free_page_tables(get_base(current->ldt[2]), get_limit(0x17));
 	if (last_task_used_math == current) {
@@ -508,6 +532,8 @@ restart_interp:
 	current->start_stack = p & 0xfffff000;
 	current->suid = current->euid = e_uid;
 	current->sgid = current->egid = e_gid;
+	/* 将原调用系统中断的程序在堆栈上的代码指针替换为指向新执行程序的入口点，并将栈指针
+	 替换为新执行文件的栈指针 */
 	eip[0] = ex.a_entry;		/* eip, magic happens :-) */
 	eip[3] = p;					/* stack pointer */
 	return 0;

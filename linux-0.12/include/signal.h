@@ -54,8 +54,8 @@ typedef unsigned int sigset_t;		/* 32 bits */
 
 struct sigaction {
 	void (*sa_handler)(int);
-	sigset_t sa_mask;
-	int sa_flags;
+	sigset_t sa_mask;			/* 对信号的屏蔽码，在信号程序执行时将阻塞对这些信号的处理 */
+	int sa_flags;				/* 改变信号处理过程的信号集 */
 	void (*sa_restorer)(void);
 };
 

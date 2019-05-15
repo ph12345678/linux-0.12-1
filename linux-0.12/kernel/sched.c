@@ -87,7 +87,7 @@ int jiffies_offset = 0;		/* # clock ticks to add to get "true
 				   to WWV :-) */
 
 struct task_struct *current = &(init_task.task);
-struct task_struct *last_task_used_math = NULL;
+struct task_struct *last_task_used_math = NULL;		/* 上一个使用过协处理器的进程 */
 
 struct task_struct * task[NR_TASKS] = {&(init_task.task), };
 
