@@ -31,17 +31,28 @@
 /* 除了SIGKILL和SIGSTOP信号以外其他信号都是可阻塞的 */
 #define _BLOCKABLE 	(~(_S(SIGKILL) | _S(SIGSTOP)))
 
+/**
+ * 显示任务号nr的进程号，进程状态和内核堆栈空闲字节数(大约)及其相关的子进程和父进程信息
+ * @param[in]	nr		任务号
+ * @param[in]	p 
+ * @return		void
+ */
 /* static */ void show_task(int nr, struct task_struct * p)
 {
+	/* 任务结构的数据和任务的内核态栈在同一内存页面上 */
 	int i, j = 4096 - sizeof(struct task_struct);
 
 	printk("%d: pid=%d, state=%d, father=%d, child=%d, ", nr, p->pid,
 		p->state, p->p_pptr->pid, p->p_cptr ? p->p_cptr->pid : -1);
 	i = 0;
+	/* 计算1页内存从task_struct结构后0的个数 */
 	while (i < j && !((char *)(p+1))[i]) {
 		i++;
 	}
-	printk("%d/%d chars free in kstack\n\r",i,j);
+	printk("%d/%d chars free in kstack\n\r", i, j);
+
+	/* 该指针指向任务结构体1019偏移处，应该指的是tts中的EIP（PC指针） */
+	/* 这么写有点搞... */
 	printk("   PC=%08X.", *(1019 + (unsigned long *) p));
 	if (p->p_ysptr || p->p_osptr) {
 		printk("   Younger sib=%d, older sib=%d\n\r", 
@@ -52,6 +63,10 @@
 	}
 }
 
+/**
+ * 显示所有进程的进程信息
+ * @return		void
+ */
 void show_state(void)
 {
 	int i;
@@ -64,6 +79,8 @@ void show_state(void)
 	}
 }
 
+/* PC机8253计数/定时芯片的输入时钟频率约为1.193180MHz。Linux内核希望定时器中断频率
+ 是100Hz，也即每10ms发出一次时钟中断。因此这里LATCH是设置8253芯片的初值 */
 #define LATCH (1193180/HZ)
 
 extern void mem_use(void);
@@ -78,29 +95,40 @@ union task_union {
 
 static union task_union init_task = {INIT_TASK,};
 
-unsigned long volatile jiffies=0;
-unsigned long startup_time=0;
+unsigned long volatile jiffies = 0;
+unsigned long startup_time = 0;
 int jiffies_offset = 0;		/* # clock ticks to add to get "true
 				   time".  Should always be less than
 				   1 second's worth.  For time fanatics
 				   who like to syncronize their machines
 				   to WWV :-) */
+/* 为调整时钟而需要增加的时钟嘀嗒数，以获得“精确时间”。这些调整用嘀嗒数的总和不应该超过
+ 1秒。这样做是为了那些对时间精确度要求苛刻的人，他们喜欢自己的机器时间与WWV同步 :-)
+*/
 
-struct task_struct *current = &(init_task.task);
+struct task_struct *current = &(init_task.task);	/* 当前任务指针 */
 struct task_struct *last_task_used_math = NULL;		/* 上一个使用过协处理器的进程 */
 
 struct task_struct * task[NR_TASKS] = {&(init_task.task), };
 
-long user_stack [ PAGE_SIZE>>2 ] ;
+long user_stack [ PAGE_SIZE>>2 ] ;  /* 用户堆栈 4*1K */
 
+/* Tip: Intel CPU执行堆栈操作时总是先递减堆栈指针ESP值，然后在ESP指针处保存入栈内容 */
+/* 下面结构用于设置堆栈SS:ESP，SS被设置为内核数据段选择符（0x10），ESP被设置为指向user_stack数
+ 组最后一项后面。在head.s中被使用，在刚开始内核初始化操作过程中被用作内核栈，初始化操作完成后将被
+ 用作任务0的用户态堆栈。在运行任务0之前它是内核栈，以后用作任务0和任务1的用户态栈。*/
 struct {
 	long * a;
 	short b;
 	} stack_start = { & user_stack [PAGE_SIZE>>2] , 0x10 };
+
 /*
  *  'math_state_restore()' saves the current math information in the
  * old math state array, and gets the new ones from the current task
  */
+/*
+* 将当前协处理器内容保存到老协处理器状态数组中，并将当前任务的协处理器内容加载进协处理器。
+*/
 void math_state_restore()
 {
 	if (last_task_used_math == current) {
@@ -110,7 +138,7 @@ void math_state_restore()
 	if (last_task_used_math) {
 		__asm__("fnsave %0"::"m" (last_task_used_math->tss.i387));
 	}
-	last_task_used_math=current;
+	last_task_used_math = current;
 	if (current->used_math) {
 		__asm__("frstor %0"::"m" (current->tss.i387));
 	} else {
@@ -132,9 +160,9 @@ void math_state_restore()
 
 /*
  * 'schedule()' 是一个调度函数。这是一块很好的代码，没有理由去修改它，因为它可以在所有的环境下工
- * 作(比如能够对IO-边界下得很好的响应等)。只有一件事值得留意，那就是这里的信号处进代码。
+ * 作(比如能够对IO-边界下得很好的响应等)。只有一件事值得留意，那就是这里的信号处理代码。
  * 
- * 注意!!任务0是个闲置('idle')任务，只有当没有其他任务可以运行时才调用它。它不能被杀死，也不睡眠。
+ *  注意!! 任务0是个闲置('idle')任务，只有当没有其他任务可以运行时才调用它。它不能被杀死，也不睡眠。
  * 任务0中的状态信息'state'是从来不用的。
  * 
  */
@@ -144,42 +172,60 @@ void schedule(void)
 	struct task_struct ** p;
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
+/* 检测alarm（进程的报警定时值），唤醒任何已得到信号的可中断任务 */
 
 	for(p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 		if (*p) {
+			/* 如果设置过任务超时定时值timeout，并且已经超时，则复位超时定时值，并且如果任
+			 务处于可中断睡眠状态TASK_INTERRUPTIBLE下，将其置为就绪状态（TASK_RUNNING） */
 			if ((*p)->timeout && (*p)->timeout < jiffies) {
 				(*p)->timeout = 0;
-				if ((*p)->state == TASK_INTERRUPTIBLE)
+				if ((*p)->state == TASK_INTERRUPTIBLE) {
 					(*p)->state = TASK_RUNNING;
+				}
 			}
+			/* 如果设置过任务的SIGALRM信号超时定时器值alarm，并且已经过期(alarm<jiffies)，
+			 则在信号位图中置SIGALRM信号，即向任务发送SIGALRM信号。然后清alarm。该信号的默
+			 认操作是终止进程 */
 			if ((*p)->alarm && (*p)->alarm < jiffies) {
-				(*p)->signal |= (1<<(SIGALRM-1));
+				(*p)->signal |= (1 << (SIGALRM - 1));
 				(*p)->alarm = 0;
 			}
+			/* '~(_BLOCKABLE & (*p)->blocked)'用于忽略被阻塞的信号，除被阻塞的信号外还有其
+			 他信号，并且任务处于可中断状态，则置任务为就绪状态 */
 			if (((*p)->signal & ~(_BLOCKABLE & (*p)->blocked)) &&
-			(*p)->state==TASK_INTERRUPTIBLE) {
-				(*p)->state=TASK_RUNNING;
+			(*p)->state == TASK_INTERRUPTIBLE) {
+				(*p)->state = TASK_RUNNING;
 			}
 		}
 
 /* this is the scheduler proper: */
+/* 这里是调度程序的主要部分 */
 
 	while (1) {
 		c = -1;
 		next = 0;
 		i = NR_TASKS;
 		p = &task[NR_TASKS];
+		/* 找到就绪状态下时间片最大的任务，用next指向该任务 */
 		while (--i) {
-			if (!*--p)
+			if (!*--p) {
 				continue;
-			if ((*p)->state == TASK_RUNNING && (*p)->counter > c)
+			}
+			if ((*p)->state == TASK_RUNNING && (*p)->counter > c) {
 				c = (*p)->counter, next = i;
+			}
 		}
-		if (c) break;
-		for(p = &LAST_TASK ; p > &FIRST_TASK ; --p)
-			if (*p)
-				(*p)->counter = ((*p)->counter >> 1) +
-						(*p)->priority;
+		/* c = -1，没有可以运行的任务（此时next=0，会切去任务0）；c > 0，找到了可以切换的任务 */
+		if (c) {
+			break;
+		}
+		/* 除任务0以外，存在处于就绪状态但时间片都为0的任务，则更新counter值，然后重新寻找 */
+		for(p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
+			if (*p) {
+				(*p)->counter = ((*p)->counter >> 1) + (*p)->priority;
+			}
+		}
 	}
 	switch_to(next);
 }
@@ -197,47 +243,64 @@ int sys_pause(void)
 	return 0;
 }
 
+/**
+ * 将当前任务置为可中断的或不可中断的睡眠状态
+ * @param 		p 			任务结构指针
+ * @param 		state 		任务睡眠使用的状态
+ * @return		void
+ */
 static inline void __sleep_on(struct task_struct **p, int state)
 {
 	struct task_struct *tmp;
 
-	if (!p)
+	if (!p) {
 		return;
-	if (current == &(init_task.task))
+	}
+	if (current == &(init_task.task)) {
 		panic("task[0] trying to sleep");
+	}
 	tmp = *p;
 	*p = current;
 	current->state = state;
 repeat:	schedule();
 	if (*p && *p != current) {
-		(**p).state = 0;
+		(**p).state = TASK_RUNNING;
 		current->state = TASK_UNINTERRUPTIBLE;
 		goto repeat;
 	}
-	if (!*p)
+	if (!*p) {
 		printk("Warning: *P = NULL\n\r");
-	if (*p = tmp)
-		tmp->state=0;
+	}
+	if (*p = tmp) {
+		tmp->state = 0;
+	}
 }
 
 void interruptible_sleep_on(struct task_struct **p)
 {
-	__sleep_on(p,TASK_INTERRUPTIBLE);
+	__sleep_on(p, TASK_INTERRUPTIBLE);
 }
 
 void sleep_on(struct task_struct **p)
 {
-	__sleep_on(p,TASK_UNINTERRUPTIBLE);
+	__sleep_on(p, TASK_UNINTERRUPTIBLE);
 }
 
+/**
+ * 唤醒不可中断等待任务
+ * @param 		p 		任务结构指针
+ * @return		void
+ */
 void wake_up(struct task_struct **p)
 {
 	if (p && *p) {
-		if ((**p).state == TASK_STOPPED)
+		if ((**p).state == TASK_STOPPED) {
 			printk("wake_up: TASK_STOPPED");
-		if ((**p).state == TASK_ZOMBIE)
+		}
+		if ((**p).state == TASK_ZOMBIE) {
 			printk("wake_up: TASK_ZOMBIE");
-		(**p).state=0;
+		}
+		(**p).state = TASK_RUNNING;
 	}
 }
 
@@ -246,9 +309,9 @@ void wake_up(struct task_struct **p)
  * proper. They are here because the floppy needs a timer, and this
  * was the easiest way of doing it.
  */
-static struct task_struct * wait_motor[4] = {NULL,NULL,NULL,NULL};
-static int  mon_timer[4]={0,0,0,0};
-static int moff_timer[4]={0,0,0,0};
+static struct task_struct * wait_motor[4] = {NULL, NULL, NULL, NULL};
+static int  mon_timer[4] = {0, 0, 0, 0};
+static int moff_timer[4] = {0, 0, 0, 0};
 unsigned char current_DOR = 0x0C;
 
 int ticks_to_floppy_on(unsigned int nr)
@@ -256,9 +319,10 @@ int ticks_to_floppy_on(unsigned int nr)
 	extern unsigned char selected;
 	unsigned char mask = 0x10 << nr;
 
-	if (nr>3)
+	if (nr>3) {
 		panic("floppy_on: nr>3");
-	moff_timer[nr]=10000;		/* 100 s = very big :-) */
+	}
+	moff_timer[nr] = 10000;		/* 100 s = very big :-) */
 	cli();				/* use floppy_off to turn it off */
 	mask |= current_DOR;
 	if (!selected) {
@@ -266,11 +330,12 @@ int ticks_to_floppy_on(unsigned int nr)
 		mask |= nr;
 	}
 	if (mask != current_DOR) {
-		outb(mask,FD_DOR);
-		if ((mask ^ current_DOR) & 0xf0)
-			mon_timer[nr] = HZ/2;
-		else if (mon_timer[nr] < 2)
+		outb(mask, FD_DOR);
+		if ((mask ^ current_DOR) & 0xf0) {
+			mon_timer[nr] = HZ / 2;
+		} else if (mon_timer[nr] < 2) {
 			mon_timer[nr] = 2;
+		}
 		current_DOR = mask;
 	}
 	sti();
@@ -280,14 +345,15 @@ int ticks_to_floppy_on(unsigned int nr)
 void floppy_on(unsigned int nr)
 {
 	cli();
-	while (ticks_to_floppy_on(nr))
-		sleep_on(nr+wait_motor);
+	while (ticks_to_floppy_on(nr)) {
+		sleep_on(nr + wait_motor);
+	}
 	sti();
 }
 
 void floppy_off(unsigned int nr)
 {
-	moff_timer[nr]=3*HZ;
+	moff_timer[nr] = 3 * HZ;
 }
 
 void do_floppy_timer(void)
@@ -299,13 +365,15 @@ void do_floppy_timer(void)
 		if (!(mask & current_DOR))
 			continue;
 		if (mon_timer[i]) {
-			if (!--mon_timer[i])
+			if (!--mon_timer[i]) {
 				wake_up(i+wait_motor);
+			}
 		} else if (!moff_timer[i]) {
 			current_DOR &= ~mask;
-			outb(current_DOR,FD_DOR);
-		} else
-			moff_timer[i]--;
+			outb(current_DOR, FD_DOR);
+		} else {
+			moff_timer[i] --;
+		}
 	}
 }
 
@@ -321,17 +389,21 @@ void add_timer(long jiffies, void (*fn)(void))
 {
 	struct timer_list * p;
 
-	if (!fn)
+	if (!fn) {
 		return;
+	}
 	cli();
-	if (jiffies <= 0)
+	if (jiffies <= 0) {
 		(fn)();
-	else {
-		for (p = timer_list ; p < timer_list + TIME_REQUESTS ; p++)
-			if (!p->fn)
+	} else {
+		for (p = timer_list ; p < timer_list + TIME_REQUESTS ; p++) {
+			if (!p->fn) {
 				break;
-		if (p >= timer_list + TIME_REQUESTS)
+			}
+		}
+		if (p >= timer_list + TIME_REQUESTS) {
 			panic("No more time requests free");
+		}
 		p->fn = fn;
 		p->jiffies = jiffies;
 		p->next = next_timer;
@@ -414,10 +486,10 @@ void do_timer(long cpl)
 
 /**
  * 设置报警定时时间值（秒）
- * @note 		alarm的单位是系统滴答（1滴答为10毫秒）,它是系统开机起到设置定时操作时系统滴答值
- * 				jiffies和转换成滴答单位的定时值之和，即'jiffies + HZ*定时秒值'
+ * alarm的单位是系统滴答（1滴答为10毫秒）,它是系统开机起到设置定时操作时系统滴答值jiffies和转换成
+ * 滴答单位的定时值之和，即'jiffies + HZ*定时秒值'
  * @param[in]	seconds		新的定时时间值(单位是秒)
- * @retval		若参数seconds大于0，则设置新定时值，并返回原定时时刻还剩余的间隔时间；否则返回0。
+ * @retval		若参数seconds大于0，则设置新定时值，并返回原定时时刻还剩余的间隔时间；否则返回0
  */
 int sys_alarm(long seconds)
 {

@@ -290,14 +290,16 @@ int sys_getgroups(int gidsetsize, gid_t *grouplist)
 {
 	int	i;
 
-	if (gidsetsize)
+	if (gidsetsize) {
 		verify_area(grouplist, sizeof(gid_t) * gidsetsize);
+	}
 
 	for (i = 0; (i < NGROUPS) && (current->groups[i] != NOGROUP);
 	     i++, grouplist++) {
 		if (gidsetsize) {
-			if (i >= gidsetsize)
+			if (i >= gidsetsize) {
 				return -EINVAL;
+			}
 			put_fs_word(current->groups[i], (short *) grouplist);
 		}
 	}
@@ -308,30 +310,41 @@ int sys_setgroups(int gidsetsize, gid_t *grouplist)
 {
 	int	i;
 
-	if (!suser())
+	if (!suser()) {
 		return -EPERM;
-	if (gidsetsize > NGROUPS)
+	}
+	if (gidsetsize > NGROUPS) {
 		return -EINVAL;
+	}
 	for (i = 0; i < gidsetsize; i++, grouplist++) {
 		current->groups[i] = get_fs_word((unsigned short *) grouplist);
 	}
-	if (i < NGROUPS)
+	if (i < NGROUPS) {
 		current->groups[i] = NOGROUP;
+	}
 	return 0;
 }
 
+/**
+ * 检查当前进程是否在指定的用户组grp中
+ * @param[in] 	grp		指定的用户组号
+ * @return 		是则返回1，否则返回0
+ */
 int in_group_p(gid_t grp)
 {
 	int	i;
 
-	if (grp == current->egid)
+	if (grp == current->egid) {
 		return 1;
+	}
 
 	for (i = 0; i < NGROUPS; i++) {
-		if (current->groups[i] == NOGROUP)
+		if (current->groups[i] == NOGROUP) {
 			break;
-		if (current->groups[i] == grp)
+		}
+		if (current->groups[i] == grp) {
 			return 1;
+		}
 	}
 	return 0;
 }

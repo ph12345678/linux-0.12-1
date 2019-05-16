@@ -112,8 +112,8 @@ struct task_struct {
 	long priority;					/* 优先级 */
 	long signal;					/* 信号位图 */
 	struct sigaction sigaction[32];	/* 信号执行属性结构,对应信号将要执行的操作和标志信息 */
-	long blocked;					/* bitmap of masked signals */
-									/* 进程信号屏蔽码(对应信号位图) */
+	long blocked;					/* 进程信号屏蔽码(对应信号位图) */ /* bitmap of masked signals */
+									
 /* various fields */
 /* 可变字段 */
 	int exit_code;					/* 退出码 */
@@ -234,11 +234,11 @@ extern int in_group_p(gid_t grp);
 #define _LDT(n) ((((unsigned long) n)<<4)+(FIRST_LDT_ENTRY<<3))
 #define ltr(n) __asm__("ltr %%ax"::"a" (_TSS(n)))
 #define lldt(n) __asm__("lldt %%ax"::"a" (_LDT(n)))
-#define str(n) \
-__asm__("str %%ax\n\t" \
-	"subl %2,%%eax\n\t" \
-	"shrl $4,%%eax" \
-	:"=a" (n) \
+#define str(n) 				\
+__asm__("str %%ax\n\t" 		\
+	"subl %2,%%eax\n\t" 	\
+	"shrl $4,%%eax" 		\
+	:"=a" (n) 				\
 	:"a" (0),"i" (FIRST_TSS_ENTRY<<3))
 /*
  *	switch_to(n) should switch tasks to task nr n, first
@@ -263,27 +263,27 @@ __asm__("cmpl %%ecx,current\n\t"			 	\
 
 #define PAGE_ALIGN(n) (((n)+0xfff)&0xfffff000)
 
-#define _set_base(addr,base) \
-__asm__("movw %%dx,%0\n\t" \
-	"rorl $16,%%edx\n\t" \
-	"movb %%dl,%1\n\t" \
-	"movb %%dh,%2" \
-	::"m" (*((addr)+2)), \
-	  "m" (*((addr)+4)), \
-	  "m" (*((addr)+7)), \
-	  "d" (base) \
+#define _set_base(addr,base) 		\
+__asm__("movw %%dx,%0\n\t" 			\
+	"rorl $16,%%edx\n\t" 			\
+	"movb %%dl,%1\n\t" 				\
+	"movb %%dh,%2" 					\
+	::"m" (*((addr)+2)), 			\
+	  "m" (*((addr)+4)), 			\
+	  "m" (*((addr)+7)), 			\
+	  "d" (base) 					\
 	  )
 
-#define _set_limit(addr,limit) \
-__asm__("movw %%dx,%0\n\t" \
-	"rorl $16,%%edx\n\t" \
-	"movb %1,%%dh\n\t" \
-	"andb $0xf0,%%dh\n\t" \
-	"orb %%dh,%%dl\n\t" \
-	"movb %%dl,%1" \
-	::"m" (*(addr)), \
-	  "m" (*((addr)+6)), \
-	  "d" (limit) \
+#define _set_limit(addr,limit) 		\
+__asm__("movw %%dx,%0\n\t" 			\
+	"rorl $16,%%edx\n\t" 			\
+	"movb %1,%%dh\n\t" 				\
+	"andb $0xf0,%%dh\n\t" 			\
+	"orb %%dh,%%dl\n\t" 			\
+	"movb %%dl,%1" 					\
+	::"m" (*(addr)), 				\
+	  "m" (*((addr)+6)), 			\
+	  "d" (limit) 					\
 	)
 
 #define set_base(ldt,base) _set_base( ((char *)&(ldt)) , base )
@@ -303,9 +303,9 @@ __base;})
 
 #define get_base(ldt) _get_base( ((char *)&(ldt)) )
 
-#define get_limit(segment) ({ \
-unsigned long __limit; \
-__asm__("lsll %1,%0\n\tincl %0":"=r" (__limit):"r" (segment)); \
-__limit;})
+#define get_limit(segment) ({ 										\
+	unsigned long __limit; 											\
+	__asm__("lsll %1,%0\n\tincl %0":"=r" (__limit):"r" (segment)); 	\
+	__limit;})
 
 #endif

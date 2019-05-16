@@ -40,12 +40,12 @@
  */
 /*
  * OK，Peter编制了复杂但很直观的多个_wait()函数。我对这些函数进行了改写，以使之更简洁：这些代码
- * 可能不容易看懂，但是其中应该不会存在竞争条件问题，并且很实际。如果你能理解这里编制的代码，那
- * 么就说明你已经理解Linux中睡眠/唤醒的工作机制。
+ * 可能不容易看懂，但是其中应该不会存在竞争条件问题，并且很实际。如果你能理解这里编制的代码，那么
+ * 就说明你已经理解Linux中睡眠/唤醒的工作机制。
  *
  * 两个很简单的过程，add_wait()和free_wait()执行了主要操作。在整个select处理过程中我们不得不禁
- * 止中断。但是这样做并不会带来太多的损失：因为当我们不在执行本任务时睡眠状态会自动释放中断(即
- * 其他任务会使用自己EFLAGS中的中断标志)。
+ * 止中断。但是这样做并不会带来太多的损失：因为当我们不在执行本任务时睡眠状态会自动释放中断(即其他
+ * 任务会使用自己EFLAGS中的中断标志)。
  */
 
 typedef struct {
@@ -61,7 +61,7 @@ typedef struct {
 /**
  * 把未准备好描述符的等待队列指针加入等待表wait_table中
  * @param[in]	*wait_address	与描述符相关的等待队列头指针。如tty读缓冲队列secondary的
- *								等待队列头指针是proc_list。
+ *								等待队列头指针是proc_list
  * @param[in]	p				do_select()中定义的等待表结构指针
  * @retval		void
  */
@@ -80,7 +80,7 @@ static void add_wait(struct task_struct ** wait_address, select_table * p)
 	p->entry[p->nr].wait_address = wait_address;
 	p->entry[p->nr].old_task = * wait_address;
 	*wait_address = current;
-	p->nr++;
+	p->nr ++;
 }
 
 
@@ -90,7 +90,7 @@ static void add_wait(struct task_struct ** wait_address, select_table * p)
  * 任务，它与kernel/sched.c中sleep_on()函数的后半部分代码几乎完全相同，请参考对sleep_on()函数的
  * 说明。
  * @param[in]	p		等待表结构指针
- * @retval		void
+ * @return		void
  */
 static void free_wait(select_table * p)
 {
