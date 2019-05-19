@@ -38,7 +38,6 @@ linux-0.12目录为修改过的源代码，其中加入了**中文注释**，修
 
 1. [C代码阅读提示](src/note/知识积累/C代码阅读提示.md)
 2. [汇编中各寄存器的作用](src/note/知识积累/汇编中各寄存器的作用.md)
-3. [内核源码文件目录说明](src/note/知识积累/内核源码文件目录说明.md)
 
 ### 系统总览
 
@@ -54,7 +53,7 @@ linux-0.12目录为修改过的源代码，其中加入了**中文注释**，修
 
 ### 文件系统 fs/
 
-1. [总览](https://ultraji.github.io/post/linux0.12-filesystem.html)
+1. [文件系统概述](https://ultraji.github.io/post/linux0.12-filesystem.html) `include/linux/fs.h`
 2. [高速缓冲区的实现](https://ultraji.github.io/post/linux0.12-filesystem-buffer.html) 相关文件：`buffer.c`
 3. [write和read的实现](https://ultraji.github.io/post/linux0.12-filesystem-rw.html) 相关文件：`block_dev.c、file_dev.c、char_dev.c、pipe.c、read_write.c`
 

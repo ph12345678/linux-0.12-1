@@ -62,7 +62,7 @@ static inline _syscall0(int, sync)
 
 #include <string.h>
 
-#include <linux/log_print.h> 	/* 打印功能 */
+#include <linux/log_print.h> 	/* 日志打印功能 */
 
 static char printbuf[1024];		/* 静态字符串数组，用作内核显示信息的缓存。*/
 
@@ -176,7 +176,7 @@ void main(void)		/* This really is void, no error here. */
 	envp_rc[1] = term;
 	drive_info = DRIVE_INFO;
 
-	/* 根据机器物理内存容量设置高速缓冲区和主内存区的r */
+	/* 根据机器物理内存容量设置高速缓冲区和主内存区的起始地址 */
 	memory_end = (1 << 20) + (EXT_MEM_K << 10); /* 1M + 扩展内存大小 */
 	memory_end &= 0xfffff000;					/* 忽略不到4K(1页)的内存 */
 	if (memory_end > 16 * 1024 * 1024) {		/* 最多管理16M内存 */

@@ -79,12 +79,11 @@ void buffer_init(long buffer_end);			/* 高速缓冲区初始化 */
 #define PIPE_READ_WAIT(inode) 	((inode).i_wait)
 #define PIPE_WRITE_WAIT(inode) 	((inode).i_wait2)
 
-/* 管道头、管道尾、管道大小、管道空、管道满、管道头指针递增 */
-#define PIPE_HEAD(inode) 		((inode).i_zone[0])
-#define PIPE_TAIL(inode) 		((inode).i_zone[1])
-#define PIPE_SIZE(inode)		((PIPE_HEAD(inode) - PIPE_TAIL(inode)) & (PAGE_SIZE - 1))
-#define PIPE_EMPTY(inode) 		(PIPE_HEAD(inode) == PIPE_TAIL(inode))
-#define PIPE_FULL(inode) 		(PIPE_SIZE(inode) == (PAGE_SIZE - 1))
+#define PIPE_HEAD(inode) 		((inode).i_zone[0])		/* 管道头部指针 */
+#define PIPE_TAIL(inode) 		((inode).i_zone[1])		/* 管道尾部指针 */
+#define PIPE_SIZE(inode)		((PIPE_HEAD(inode) - PIPE_TAIL(inode)) & (PAGE_SIZE - 1))	/* 管道大小 */
+#define PIPE_EMPTY(inode) 		(PIPE_HEAD(inode) == PIPE_TAIL(inode))	/* 管道空 */
+#define PIPE_FULL(inode) 		(PIPE_SIZE(inode) == (PAGE_SIZE - 1))	/* 管道满 */
 
 #define NIL_FILP	((struct file *)0)	/* 空文件结构指针 */
 #define SEL_IN		1
