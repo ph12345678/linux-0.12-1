@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 
 /** 
- * 释放所有一次间接块(内部函数)
+ * 释放所有一次间接块
  * @param[in]	dev		文件系统所有设备的设备号
  * @param[in]	block	逻辑块号
  * @retval  	成功返回1，失败返回0
@@ -49,7 +49,7 @@ static int free_ind(int dev, int block)
 
 
 /** 
- * 释放所有二次间接块(内部函数)
+ * 释放所有二次间接块
  * @param[in]	dev		文件系统所有设备的设备号
  * @param[in]	block	逻辑块号
  * @retval		成功返回1，失败返回0
@@ -79,7 +79,7 @@ static int free_dind(int dev, int block)
 		}
 		brelse(bh);							/* 释放二次间接块占用的缓冲块 */
 	}
-	// 最后释放设备上的二次间接块。但如果其中有逻辑块没有被释放，则返回0(失败)。
+	/* 最后释放设备上的二次间接块。但如果其中有逻辑块没有被释放，则返回0(失败) */
 	if (block_busy) {
 		return 0;
 	} else {
@@ -89,7 +89,7 @@ static int free_dind(int dev, int block)
 
 /** 
  * 截断文件数据函数
- * 将节点对应的文件长度减0，并释放占用的设备空间。
+ * 将节点对应的文件长度减0，并释放占用的设备空间
  * @param[in]	inode
  * @retval  	void
  */
@@ -128,8 +128,8 @@ repeat:
 	} else {
 		block_busy = 1;					/* 若没有释放掉则置标志 */
 	}
-	/* 此后设置i节点已修改标志，并且如果还有逻辑块由于 “忙”而没有被释放，则把当前进程运行时间
-	 片置0，以让当前进程先被切换去运行其他进程，稍等一会再重新执行释放操作。*/
+	/* 设置i节点已修改标志，并且如果还有逻辑块由于“忙”而没有被释放，则把当前进程运行时间
+	 片置0，以让当前进程先被切换去运行其他进程，稍等一会再重新执行释放操作 */
 	inode->i_dirt = 1;
 	if (block_busy) {
 		current->counter = 0;			/* 当前进程时间片置0 */
@@ -137,7 +137,6 @@ repeat:
 		goto repeat;
 	}
 	inode->i_size = 0;					/* 文件大小置零 */
-	/* 重新置文件修改时间和i节点改变时间为当前时间 */
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 }
 

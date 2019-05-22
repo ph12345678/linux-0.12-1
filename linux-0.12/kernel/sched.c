@@ -245,6 +245,7 @@ int sys_pause(void)
 
 /**
  * 将当前任务置为可中断的或不可中断的睡眠状态
+ * @note		该函数存在问题
  * @param 		p 			任务结构指针
  * @param 		state 		任务睡眠使用的状态
  * @return		void
