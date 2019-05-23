@@ -36,10 +36,10 @@ extern unsigned long HIGH_MEMORY;
 
 extern unsigned char mem_map [ PAGING_PAGES ];
 
-#define PAGE_DIRTY	0x40
-#define PAGE_ACCESSED	0x20
-#define PAGE_USER	0x04
-#define PAGE_RW		0x02
-#define PAGE_PRESENT	0x01
+#define PAGE_DIRTY		0x40		/* 脏位 */
+#define PAGE_ACCESSED	0x20		/* 已访问位 */
+#define PAGE_USER		0x04		/* 用户/超级用户位 */
+#define PAGE_RW			0x02		/* 页面读写位 */
+#define PAGE_PRESENT	0x01		/* 页面存在位 */
 
 #endif

@@ -118,7 +118,6 @@ void swap_in(unsigned long *table_ptr)
     int swap_nr;
     unsigned long page;
 
-    // 对于已放到交换设备中去的内存页面，相应页表项中存放的应是交换页面号*2，即(swap_nr << 1)
     if (!swap_bitmap) {
         printk("Trying to swap in without swap bit-map");
         return;
@@ -127,15 +126,12 @@ void swap_in(unsigned long *table_ptr)
         printk("trying to swap in present page\n\r");
         return;
     }
+    /* 对于已放到交换设备中去的内存页面，相应页表项中存放的应是交换页面号*2，即(swap_nr << 1) */
     swap_nr = *table_ptr >> 1;
     if (!swap_nr) { /* 交换页面号为0 */
         printk("No swap page in swap_in\n\r");
         return;
     }
-    // 然后申请一页物理内存并从交换设备中读入页面号为swap_nr的页面。在把页面交换进来后，就把
-    // 交换位图中对应比特位置位。如果其原本就是置位的，说明此次是再次从交换设备中读入相同的页
-    // 面，于是显示一下警告信息。最后让页表指向该物理页面，并设置页面已修改，用户可读写和存在
-    // 标志(Dirty,U/S,R/W,P)。
     if (!(page = get_free_page())) {
         oom();
     }
@@ -143,47 +139,47 @@ void swap_in(unsigned long *table_ptr)
     if (setbit(swap_bitmap, swap_nr)) {
         printk("swapping in multiply from same page\n\r");
     }
+    /* 让页表指向该物理页面，并设置页面已修改，用户可读写和存在标志(Dirty,U/S,R/W,P)。*/
     *table_ptr = page | (PAGE_DIRTY | 7);
 }
 
-// 尝试把页面交换出去
-// 若页面没有被修改过则不必保存在交换设备中，因为对应页面还可以再直接从相应映像文件中读入。于是
-// 可以直接释放掉相应物理页面了事。否则就申请一个交换页面号，然后把页面交换出去。此时交换页面号
-// 要保存在对应页表项中，并且仍需要保持页表项存在位P=0。参数是页表项指针。页面换或释放成功返回1，
-// 否则返回0。
+/**
+ * 尝试把页面交换出去
+ * 若页面没有被修改过则不必保存在交换设备中，因为对应页面还可以再直接从相应映像文件中读入，于是
+ * 可以直接释放掉相应物理页面了事；否则就申请一个交换页面号，然后把页面交换出去。此时交换页面号
+ * 要保存在对应页表项中，并且仍需要保持页表项存在位P=0
+ * @param[in]   table_ptr   页表项指针。
+ * @return      页面换或释放成功返回1，失败返回0
+ */
 int try_to_swap_out(unsigned long * table_ptr)
 {
     unsigned long page;
     unsigned long swap_nr;
 
-    // 首先判断参数的有效性。若需要交换出去的内存页面并不存在(或称无效)，则即可退出。若页表项
-    // 指定的物理页面地址大于分页管理的内存高端PAGING_MEMORY(15MB)，也退出。
     page = *table_ptr;
-    if (!(PAGE_PRESENT & page))
+    if (!(PAGE_PRESENT & page)) { /* 要换出的页面不存在 */
         return 0;
-    if (page - LOW_MEM > PAGING_MEMORY)
+    }
+    if (page - LOW_MEM > PAGING_MEMORY) { /* 指定物理内存地址高于内存高端 */
         return 0;
-    // 若内存页面已被修改过，但是该页面是被共享的，那么为了提高运行效率，此类页面不宜被交换出，
-    // 于是直接退出，函数返回0。否则就申请一交换页面号，并把它保存在页表项中，然后把页面交换出
-    // 去并释放对应物理内存页面.
-    if (PAGE_DIRTY & page) {
+    }
+    if (PAGE_DIRTY & page) { /* 内存页面已被修改过 */
         page &= 0xfffff000;					/* 取物理页面地址 */
-        if (mem_map[MAP_NR(page)] != 1)
+        if (mem_map[MAP_NR(page)] != 1) {   /* 页面又是被共享的，不宜换出 */
             return 0;
-        if (!(swap_nr = get_swap_page()))	/* 申请交换页面号 */
+        }
+        if (!(swap_nr = get_swap_page())) {
             return 0;
-        // 对于要交换设备中的页面，相应页表项中将存放的是(swap_nr << 1)。乘2(左移1位)是为
-        // 了空出原来页表项的存在位(P)。只有存在位P=0并且页表项内容不为0的页面才会在交换设备
-        // 中。Intel手册中明确指出，当一个表项的存在位P=0时(无效页表项)，所有其他位(位31-1)
-        // 可供随意使用。下面写交换页函数write_swap_page(nr,buffer)被定义为
-        // ll_rw_page(WRITE,SWAP_DEV,(nr),(buffer))。
+        }
+        /* 乘2(左移1位)是为了空出原来页表项的存在位(P)。只有存在位P=0，并且页表项内容不
+         为0的页面才会在交换设备中 */
         *table_ptr = swap_nr << 1;
         invalidate();						/* 刷新CPU页变换高速缓冲 */
         write_swap_page(swap_nr, (char *) page);
         free_page(page);
         return 1;
     }
-    // 否则表明页面没有修改过.那么就不用交换出去,而直接释放即可.
+    /* 执行到这表明页面没有修改过，直接释放即可 */
     *table_ptr = 0;
     invalidate();
     free_page(page);
@@ -202,7 +198,7 @@ int try_to_swap_out(unsigned long * table_ptr)
 /**
  * 把内存页面交换到交换设备中
  * 从线性地址64MB对应的目录项(FIRST_VM_PAGE>>10)开始，搜索整个4GB线性空间，对有效页目录
- * 二级页表指定的物理内存页面执行交换到交换设备中去的尝试。该函数会在get_free_page()中被调用。
+ * 二级页表指定的物理内存页面执行交换到交换设备中去的尝试。该函数会在get_free_page()中被调用
  * @return  成功返回1，失败返回0
  */
 int swap_out(void)
