@@ -171,10 +171,10 @@ int try_to_swap_out(unsigned long * table_ptr)
         if (!(swap_nr = get_swap_page())) {
             return 0;
         }
-        /* 乘2(左移1位)是为了空出原来页表项的存在位(P)。只有存在位P=0，并且页表项内容不
+        /* 左移1位是为了空出原来页表项的存在位(P)。只有存在位P=0，并且页表项内容不
          为0的页面才会在交换设备中 */
         *table_ptr = swap_nr << 1;
-        invalidate();						/* 刷新CPU页变换高速缓冲 */
+        invalidate();
         write_swap_page(swap_nr, (char *) page);
         free_page(page);
         return 1;
@@ -208,38 +208,33 @@ int swap_out(void)
     int counter = VM_PAGES;			/* 表示除去任务0以外的其他任务的所有页数目 */
     int pg_table;
 
-    // 首先搜索页目录表，查找二级页表存在的页目录项pg_table。找到则退出循环，否则高速页目
-    // 录项数对应剩余二级页表项数counter，然后继续检测下一项目录项。若全部搜索完还没有找到
-    // 适合的(存在的)页目录项，就重新搜索。
+    /* 首先搜索页目录表，查找第一个有效的页目录项pg_table */
     while (counter > 0) {
-        pg_table = pg_dir[dir_entry];		/* 页目录项内容 */
+        pg_table = pg_dir[dir_entry];
         if (pg_table & 1) {
             break;
         }
-        counter -= 1024;					/* 1个页表对应1024个页帧 */
-        dir_entry++;						/* 下一目录项 */
-        // 如果整个4GB的1024个页目录项检查完了则又回到第1个任务重新开始检查
+        counter -= 1024;    /* 1个页表对应1024个页帧 */
+        dir_entry++;
         if (dir_entry >= 1024) {
+            /* 检索完整个页目录表，重新从头开始检索（执行不到） */
             dir_entry = FIRST_VM_PAGE >> 10;
         }
     }
-    // 在取得当前目录项的页表指针后，针对该页表中的所有1024个页面，逐一调用交换函数
-    // try_to_swap_out()尝试交换出去。一旦某个页面成功交换到交换设备中就返回1。若对所
-    // 有目录项的所有页表都已尝试失败，则显示"交换内存用完"的警告，并返回0。
-    pg_table &= 0xfffff000;					/* 页表指针(地址)(页对齐) */
+    /* 对取到页目录项对应页表中的页表项开始逐一调用交换函数 */
+    pg_table &= 0xfffff000;
     while (counter-- > 0) {
         page_entry++;
-        // 如果已经尝试处理完当前页表所有项还没有能够成功地交换出一个页面，即此时页表项索引
-        // 大于等于1024，则如同前面第135-143行执行相同的处理来选出一个二级页表存在的页目
-        // 录项，并取得相应二级页表指针。
         if (page_entry >= 1024) {
+            /* 页表项索引>=1024，则取下一个有效的页目录项 */
             page_entry = 0;
         repeat:
             dir_entry++;
             if (dir_entry >= 1024) {
+                /* 检索完整个页目录表，重新从头开始检索（执行不到） */
                 dir_entry = FIRST_VM_PAGE >> 10;
             }
-            pg_table = pg_dir[dir_entry];	/* 页目录项内容 */
+            pg_table = pg_dir[dir_entry];
             if (!(pg_table & 1)) {
                 if ((counter -= 1024) > 0) {
                     goto repeat;
@@ -247,11 +242,13 @@ int swap_out(void)
                     break;
                 }
             }
-            pg_table &= 0xfffff000;			/* 页表指针 */
+            pg_table &= 0xfffff000;
         }
-        if (try_to_swap_out(page_entry + (unsigned long *) pg_table))
+        if (try_to_swap_out(page_entry + (unsigned long *) pg_table)) {
+            /* 成功换出一个页面即退出 */
             return 1;
         }
+    }
     printk("Out of swap-memory\n\r");
     return 0;
 }
@@ -300,8 +297,8 @@ repeat:
 
 /**
  * 内存交换初始化
- * @note 交换页面位图中，swap_bitmap[0]和swap_bitmap[swap_size～SWAP_BITS-1]不可用，
- *       swap_bitmap[1～swap_size-1]可用
+ * @note 在交换页面位图中，swap_bitmap[0]和swap_bitmap[swap_size ～ SWAP_BITS-1]不可用，
+ *       swap_bitmap[1 ～ swap_size-1]可用
  * @param[in]	void
  * @retval		void
  */
@@ -343,7 +340,7 @@ void init_swapping(void)
         return;
     }
     memset(swap_bitmap + 4086, 0, 10);
-    /* 检查不可用的比特位（[0]，[swap_size~SWAP_BITS-1]） */
+    /* 检查不可用的比特位（[0]，[swap_size ~ SWAP_BITS-1]） */
     for (i = 0 ; i < SWAP_BITS ; i++) {
         if (i == 1) {
             i = swap_size;

@@ -57,16 +57,14 @@
 
 /* 用于判断给定线性地址是否位于当前进程的代码段中，“(((addr)+4095)&~4095)”用于取得线性
  地址addr所在内存页面的末端地址 */
-#define CODE_SPACE(addr) \
-	((((addr) + 4095) & ~4095) < current->start_code + current->end_code)
+#define CODE_SPACE(addr)	((((addr) + 4095) & ~4095) < current->start_code + current->end_code)
 
 unsigned long HIGH_MEMORY = 0;	/* 存放实际物理内存最高端地址 */
 
 /* 从from处复制一页内存到to处(4KB) */
-#define copy_page(from, to) \
-		__asm__("cld ; rep ; movsl"::"S" (from),"D" (to),"c" (1024))
+#define copy_page(from, to) 	__asm__("cld ; rep ; movsl"::"S" (from),"D" (to),"c" (1024))
 
-/* 内存映射字节图(1字节代表1页内存) */
+/* 内存映射字节图(1字节代表1页内存的使用情况) */
 unsigned char mem_map [ PAGING_PAGES ] = {0, };
 
 /*
@@ -79,7 +77,7 @@ unsigned char mem_map [ PAGING_PAGES ] = {0, };
 /**
  * 释放物理地址addr开始的1页面内存
  * @param[in]	addr	需要释放的起始物理地址
- * @retval		void
+ * @return		void
  */
 void free_page(unsigned long addr)
 {
@@ -123,7 +121,7 @@ int free_page_tables(unsigned long from, unsigned long size)
 	if (from & 0x3fffff) {	/* 参数from给出的线性基地址是否在4MB的边界处 */
 		panic("free_page_tables called with wrong alignment");
 	}
-	if (!from) {	/* from=0说明试图释放内核和缓冲所占空间 */
+	if (!from) {			/* from=0说明试图释放内核和缓冲所占空间 */
 		panic("Trying to free up swapper memory space");
 	}
 	/* 计算size指定长度所占的页目录数（4MB的进位整数倍，向上取整），例如size=4.01MB则size=2 */
@@ -133,12 +131,12 @@ int free_page_tables(unsigned long from, unsigned long size)
 	dir = (unsigned long *) ((from >> 20) & 0xffc); 			/* _pg_dir = 0 */
 	/* 循环操作页目录项，依次释放每个页表中的页表项 */
 	for ( ; size-- > 0 ; dir++) {
-		if (!(1 & *dir)) {	/* 该目录项不存在页表项，则直接跳过该页表项 */
+		if (!(1 & *dir)) {
 			continue;
 		}
 		pg_table = (unsigned long *) (0xfffff000 & *dir);
 		for (nr = 0 ; nr < 1024 ; nr++) {
-			if (*pg_table) {		/* 该项有效(不为0)，则释放对应页 */
+			if (*pg_table) {		/* 该项有效则释放对应页 */
 				if (1 & *pg_table) {
 					free_page(0xfffff000 & *pg_table);
 				} else {			/* 否则释放交换设备中对应页 */
@@ -148,7 +146,7 @@ int free_page_tables(unsigned long from, unsigned long size)
 			}
 			pg_table++;
 		}
-		free_page(0xfffff000 & *dir); /* 释放页表占用的页 */
+		free_page(0xfffff000 & *dir);
 		*dir = 0;		/* 对应页表的目录项清零 */
 	}
 	invalidate();		/* 刷新CPU页变换高速缓冲 */
@@ -220,41 +218,35 @@ int copy_page_tables(unsigned long from, unsigned long to, long size)
 		if (!(1 & *from_dir)) {
 			continue;
 		}
-		// 在验证了当前源目录项和目的项正常之后，取源目录项中页表地址from_page_table。为了保存目的
-		// 目录项对应的页表，需要在主内存区中申请1页空闲内存页。如果取空闲页面函数get_free_page()返
-		// 回0，则说明没有申请到空闲内存页面，可能是内存不够，于是返回-1值退出。
 		from_page_table = (unsigned long *) (0xfffff000 & *from_dir);
 		if (!(to_page_table = (unsigned long *) get_free_page())) {
 			return -1;		/* Out of memory, see freeing */
 		}
-		// 否则我们设置目的目录项信息，把最后3位置位，即当前目的目录项"或"上7，表示对应页表映射的内存
-		// 页面是用户级的，并且可读写，存在(User，R/W，Present)。(如果U/S位是0，则R/W就没有作用。
-		// 如果U/S是1，而R/W是0，那么运行在用户层的代码就只能读页面。如果U/S和R/W都置位，则就有读写
-		// 的权限)。
+		/* 把最后3位置位，表示对应页表映射的内存页面是用户级的，并且可读写，存在(User，R/W，Present) */
 		*to_dir = ((unsigned long) to_page_table) | 7;
 		// 然后针对当前处理的页目录项对应的页表，设置需要复制的页面项数。如果是在内核空间，则仅需复制
 		// 头160页对应的页表项(nr = 160)，对应于开始640KB物理内存。否则需要复制一个页表中的所有1024
-		// 个页表项(nr= 1024)，可映射4MB物理内存。
+		// 个页表项(nr= 1024)，可映射4MB物理内存 */
 		nr = (from == 0) ? 0xA0 : 1024;
 		// 此时对于当前页表，开始循环复制指定的nr个内存页面表项。先取出源页表项内容，如果当前源页面没有
 		// 使用(项内容为0)，则不用复制该表项，继续处理下一项。
 		for ( ; nr-- > 0 ; from_page_table++, to_page_table++) {
 			this_page = *from_page_table;
-			// 如果源页表不存在，则直接拷贝下一页表
-			if (!this_page)
+			if (!this_page) {
 				continue;
+			}
 			// 如果该表项有内容，但是其存在位P=0，则该表项对应的页面可能在交换设备中。于是先申请1页内
 			// 存，并从交换设备中读入该页面(若交换设备中有的话)。然后将该页表项复制到目的页表项中。并
 			// 修改源页表项内容指向该新申请的内存页。
 			if (!(1 & this_page)) {
 				// 申请一页新的内存然后将交换设备中的数据读取到该页面中
-				if (!(new_page = get_free_page()))
+				if (!(new_page = get_free_page())) {
 					return -1;
-				// 从交换设备中将页面读取出来
+				}
+				/* 从交换设备中将页面读取出来 */
 				read_swap_page(this_page >> 1, (char *) new_page);
-				// 目的页表项指向源页表项值
 				*to_page_table = this_page;
-				// 并修改源页表项内容指向该新申请的内存页，并设置表项标志为"页面脏"加上7
+				/* 修改源页表项内容指向该新申请的内存页，并设置表项标志为页面脏，用户级的，可读写，存在 */
 				*from_page_table = new_page | (PAGE_DIRTY | 7);
 				// 继续处理下一页表项
 				continue;
@@ -280,7 +272,7 @@ int copy_page_tables(unsigned long from, unsigned long to, long size)
 			}
         }
     }
-	invalidate();								/* 刷新页变换高速缓冲 */
+	invalidate();	/* 刷新页变换高速缓冲 */
 	return 0;
 }
 
@@ -491,7 +483,7 @@ void do_wp_page(unsigned long error_code, unsigned long address)
  * 写页面验证
  * 若页面不可写，则复制页面。在fork.c中被内存验证通用函数verify_area()调用
  * @param[in]	address		指定页面在4GB空间中的线性地址
- * @retval		void
+ * @return		void
  */
 void write_verify(unsigned long address)
 {
@@ -503,28 +495,30 @@ void write_verify(unsigned long address)
 	// 并为这个地方使用put_page()函数映射一个物理页面。接着程序从目录项中取页表地址，加上指定
 	// 页面在页表中的页表项偏移值，得对应地址的页表项指针。在该表项中包含着给定线性地址对应的物
 	// 理页面。
-	if (!( (page = *((unsigned long *) ((address >> 20) & 0xffc)) ) & 1))
+	if (!( (page = *((unsigned long *) ((address >> 20) & 0xffc)) ) & 1)) {
 		return;
+	}
 	page &= 0xfffff000;
 	// 得到页表项的物理地址
 	page += ((address >> 10) & 0xffc);
 	// 然后判断该页表项中位1(P/W)，位0(P)标志。如果该页面不可写(R/W=0)且存在，那么就执行共
 	// 享检验和复制页面操作(写时复制)。否则什么也不做，直接退出。
-	if ((3 & *(unsigned long *) page) == 1)  /* non-writeable, present */
+	if ((3 & *(unsigned long *) page) == 1) {  /* non-writeable, present */
 		un_wp_page((unsigned long *) page);
+	}
 	return;
 }
 
-// 取得一页空闲内存并映射到指定线性地址处。
-// get_free_page()仅是申请取得了主内存区的一页物理内存。而本函数则不仅是获取到一页物理内存
-// 页面，还进一步调用put_page()，将物理页面映射到指定的线性地址处。
-// 参数address是指定页面的线性地址。
+/**
+ * 取得一页空闲内存并映射到指定线性地址处
+ * @param[in]	address		指定页面的线性地址
+ * @return		void
+ */
 void get_empty_page(unsigned long address)
 {
 	unsigned long tmp;
 
-	// 若不能取得一空闲页面，或者不能将所取页面放置到指定地址处，则显示内存不够的信息。292行
-	// 上英文注释的含义是:free_page()函数的参数tmp是0也没有关系，该函数会忽略它并能正常返回。
+	/* 若不能取得一空闲页面，或者不能将所取页面放置到指定地址处，则显示内存不够的信息 */
 	if (!(tmp = get_free_page()) || !put_page(tmp, address)) {
 		free_page(tmp);		/* 0 is ok - ignored */
 		oom();
